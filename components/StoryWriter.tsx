@@ -28,12 +28,8 @@ function StoryWriter() {
 
   const runScript = async () => {
     try {
-      console.log("Starting runScript function");
-
       setRunStarted(true);
       setRunFinished(false);
-
-      console.log("Making fetch request to /api/run-script");
 
       const response = await fetch("/api/run-script", {
         method: "POST",
@@ -43,11 +39,7 @@ function StoryWriter() {
         body: JSON.stringify({ story, pages, path: storiesPath }),
       });
 
-      console.log("Fetch request completed", response);
-
       if (response.ok && response.body) {
-        console.log("Streaming started");
-
         // Handle streams from the API
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
