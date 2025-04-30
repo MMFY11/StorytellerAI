@@ -1,32 +1,75 @@
-import { BookOpen, FilePen } from "lucide-react";
+// components/Header.tsx
+"use client";
+
 import Link from "next/link";
-function Header() {
+import { useSession, signIn, signOut } from "next-auth/react";
+import { FilePen, BookOpen } from "lucide-react";
+import { DotLottieReact } from "@lottiefiles/dotlottie-react";
+
+export default function Header() {
+  const { data: session } = useSession();
+
   return (
-    <header className="relative p-16 text-center">
-        <Link href= "/">
-            <h1 className="text-6xl font-black">StoryTeller AI</h1>
-            <div className="flex justify-center whitespace-nowrap space-x-5 text-3xl lg:text-5xl">
-                <h2 >Bringing your Stories</h2>
-                <div className="relative">
-                    <div className="absolute bg-purple-500 -left-2 -top-1 -bttom-1 -right-2 md:-left-3 md:-top-0 md:-bottom-0 md:-right-3 -rotate-1 " />
-                    
-                    <p className="relative text-white">To life!</p>
-                    </div>
-                </div>
+    <header className="relative p-6 flex items-center justify-between bg-gradient-to-r from-purple-600 to-pink-500 overflow-hidden">
+      {/* Background animation */}
+      <div className="absolute inset-0 opacity-30">
+        <DotLottieReact
+          src="https://lottie.host/fe52fa19-9f1b-4bc0-a5dc-9d3ba2e17a73/TjhFY1CrhT.lottie"
+          loop
+          autoplay
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Left nav icons */}
+      <div className="relative z-10 flex space-x-4">
+        <Link href="/" className="text-white hover:opacity-80">
+          <FilePen className="w-8 h-8" />
         </Link>
+        <Link href="/stories" className="text-white hover:opacity-80">
+          <BookOpen className="w-8 h-8" />
+        </Link>
+      </div>
 
-        <div className="absolute -top-5 right-5 flex space-x-2">
-          <Link href="/">
-          <FilePen className="w-8 h-8 lg:w-10 lg:h-10 mx-auto text-purple-500 mt-10 border border-purple-500 p-2 rounded-md hover:opacity-50 cursor-pointer"
-          />
-          </Link>
+      {/* Center branding */}
+      <div className="relative z-10 text-center text-white">
+        <Link href="/" className="hover:opacity-80">
+          <h1 className="text-4xl font-bold">Kidotopia</h1>
+          <p className="text-lg">Making your stories come alive!</p>
+        </Link>
+      </div>
 
-          <Link href="/stories">
-            <BookOpen className="w-8 h-8 lg:w-10 lg:h-10 mx-auto text-purple-500 mt-10 border border-purple-500 p-2 rounded-md hover:opacity-50 cursor-pointer" />
-          </Link>
-        </div>
+      {/* Right auth buttons */}
+      <div className="relative z-10 flex space-x-4">
+        {session ? (
+          <>
+            <span className="text-white mr-2">
+              Hello, {session.user.name || session.user.email}
+            </span>
+            <button
+              onClick={() => signOut()}
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
+            >
+              Sign Out
+            </button>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/auth/login"
+              className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded"
+            >
+              Login
+            </Link>
+            <Link
+              href="/auth/register"
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
+            >
+              Register
+            </Link>
+          </>
+        )}
+      </div>
     </header>
   );
 }
-
-export default Header;

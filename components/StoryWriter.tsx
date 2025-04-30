@@ -1,5 +1,8 @@
+// components/StoryWriter.tsx
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useState, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "./ui/button";
 import {
   Select,
@@ -13,108 +16,166 @@ import { Frame } from "@gptscript-ai/gptscript";
 import renderEventMessage from "@/lib/renderEventMessage";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Mic, MicOff, Loader2 } from "lucide-react";
 
-const storiesPath = "public/stories";
+export default function StoryWriter() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
 
-function StoryWriter() {
-  const [story, setStory] = useState<string>("");
+  const [story, setStory] = useState("");
   const [pages, setPages] = useState<number>();
   const [progress, setProgress] = useState("");
-  const [runStarted, setRunStarted] = useState<boolean>(false);
+  const [runStarted, setRunStarted] = useState(false);
   const [runFinished, setRunFinished] = useState<boolean | null>(null);
   const [currentTool, setCurrentTool] = useState("");
   const [events, setEvents] = useState<Frame[]>([]);
-  const router = useRouter();
 
-  const runScript = async () => {
-    try {
-      setRunStarted(true);
-      setRunFinished(false);
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-      const response = await fetch("/api/run-script", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ story, pages, path: storiesPath }),
-      });
+  //
+  // 1) handleStream must be declared before we call it
+  //
+  const handleStream = async (
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    decoder: TextDecoder
+  ) => {
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-      if (response.ok && response.body) {
-        // Handle streams from the API
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
 
-        handleStream(reader, decoder);
-      } else {
-        console.error(
-          "Failed to start streaming",
-          response.status,
-          response.statusText
-        );
-        setRunFinished(true);
-        setRunStarted(false);
+      for (const line of lines) {
+        if (!line.startsWith("event: ")) continue;
+        const data = line.replace(/^event: /, "");
+        try {
+          const parsed = JSON.parse(data);
+          switch (parsed.type) {
+            case "callProgress":
+              setProgress(parsed.output[parsed.output.length - 1].content);
+              setCurrentTool(parsed.tool?.description || "");
+              break;
+            case "callStart":
+              setCurrentTool(parsed.tool?.description || "");
+              break;
+            case "runFinish":
+              setRunFinished(true);
+              setRunStarted(false);
+              break;
+            default:
+              setEvents((prev) => [...prev, parsed]);
+          }
+        } catch (e) {
+          console.error("Failed to parse event JSON", e, data);
+        }
       }
-    } catch (error) {
-      console.error("Fetch request failed", error);
-      setRunFinished(true);
-      setRunStarted(false);
     }
   };
 
-  async function handleStream(
-    reader: ReadableStreamDefaultReader<Uint8Array>,
-    decoder: TextDecoder
-  ) {
-    let buffer: string = "";
-    while (true) {
-      const { value, done } = await reader.read();
+  //
+  // 2) startRecording / stopRecording definitions
+  //
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
 
-      if (done) break; // breaks out of the infinite loop
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        audioChunksRef.current.push(e.data);
+      };
 
-      // Decode the Uint8Array into a string
-      const chunk = decoder.decode(value, { stream: true });
-      buffer += chunk;
+      mediaRecorderRef.current.onstop = async () => {
+        setIsProcessingVoice(true);
+        try {
+          const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          const form = new FormData();
+          form.append("audio", blob);
 
-      // Split the buffer into individual lines
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
-
-      // Process each complete line
-      lines.forEach((line) => {
-        if (line.startsWith("event: ")) {
-          const data = line.replace(/^event: /, "");
-          try {
-            const parsedData = JSON.parse(data);
-
-            if (parsedData.type === "callProgress") {
-              setProgress(
-                parsedData.output[parsedData.output.length - 1].content
-              );
-              setCurrentTool(parsedData.tool?.description || "");
-            } else if (parsedData.type === "callStart") {
-              setCurrentTool(parsedData.tool?.description || "");
-            } else if (parsedData.type === "runFinish") {
-              setRunFinished(true);
-              setRunStarted(false);
-            } else {
-              setEvents((prevEvents) => [...prevEvents, parsedData]);
-            }
-          } catch (error) {
-            console.error("Failed to parse JSON", error, data);
-          }
+          const res = await fetch("/api/speech-to-text", {
+            method: "POST",
+            body: form,
+          });
+          const { text } = await res.json();
+          setStory((s) => s + " " + text);
+        } catch (err) {
+          console.error(err);
+          toast.error("Voice transcription failed");
+        } finally {
+          setIsProcessingVoice(false);
         }
-      });
-    }
-  }
+      };
 
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+      toast.info("Recording…");
+    } catch (err) {
+      console.error(err);
+      toast.error("Microphone access denied");
+    }
+  };
+
+  const stopRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+    setIsRecording(false);
+    toast.info("Processing voice…");
+  };
+
+  //
+  // 3) runScript can now safely call handleStream, start/stopRecording exist, etc.
+  //
+  const runScript = async () => {
+    if (status !== "authenticated" || !session?.user?.id) {
+      toast.error("Please sign in first");
+      return;
+    }
+    setRunStarted(true);
+    setRunFinished(false);
+
+    try {
+      const res = await fetch("/api/run-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          story,
+          pages,
+          userId: session.user.id,
+        }),
+      });
+
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        await handleStream(reader, decoder);
+      } else {
+        console.error("Streaming failed", res.status, res.statusText);
+        setRunStarted(false);
+        setRunFinished(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setRunStarted(false);
+      setRunFinished(true);
+    }
+  };
+
+  //
+  // 4) success toast
+  //
   useEffect(() => {
     if (runFinished) {
-      toast.success("Story generated successfully!", {
+      toast.success("Story generated!", {
         action: (
-          <Button
-            onClick={() => router.push("/stories")}
-            className="bg-purple-500 ml-auto"
-          >
+          <Button onClick={() => router.push("/stories")} className="ml-auto">
             View Stories
           </Button>
         ),
@@ -124,72 +185,87 @@ function StoryWriter() {
 
   return (
     <div className="flex flex-col container">
-      <section className="flex-1 flex flex-col border border-purple-300 rounded-md p-10 space-y-2">
-        <Textarea
-          value={story}
-          onChange={(e) => setStory(e.target.value)}
-          className="flex-1 text-black"
-          placeholder="Write a story about a robot and a human who become friends..."
-        />
+      <section className="flex-1 flex flex-col border border-purple-300 rounded-md p-10 space-y-2 bg-gradient-to-r from-purple-50 to-pink-50 shadow-lg">
+        {/* text + mic */}
+        <div className="flex items-center gap-2">
+          <Textarea
+            value={story}
+            onChange={(e) => setStory(e.target.value)}
+            placeholder="Write or speak…"
+            className="flex-1 text-black"
+          />
+          <Button
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={isProcessingVoice}
+            variant={isRecording ? "destructive" : "outline"}
+            className="p-3 rounded-full"
+          >
+            {isProcessingVoice ? (
+              <Loader2 className="animate-spin h-4 w-4" />
+            ) : isRecording ? (
+              <MicOff className="h-4 w-4" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {isRecording
+            ? "Recording… click to stop"
+            : isProcessingVoice
+            ? "Transcribing…"
+            : "Press mic to speak"}
+        </p>
 
-        <Select onValueChange={(value) => setPages(parseInt(value))}>
+        {/* pages selector */}
+        <Select onValueChange={(v) => setPages(Number(v))}>
           <SelectTrigger>
-            <SelectValue placeholder="How many pages should the story be?" />
+            <SelectValue placeholder="Pages?" />
           </SelectTrigger>
-
-          <SelectContent className="w-full">
+          <SelectContent>
             {Array.from({ length: 10 }, (_, i) => (
-              <SelectItem key={i} value={String(i + 1)}>
+              <SelectItem key={i} value={`${i + 1}`}>
                 {i + 1}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
+        {/* Go! */}
         <Button
-          disabled={!story || !pages || runStarted}
-          className="w-full"
-          size="lg"
           onClick={runScript}
+          disabled={!story || !pages || runStarted}
+          size="lg"
+          className="w-full bg-pink-500 hover:bg-pink-600"
         >
           Generate Story
         </Button>
       </section>
-      <section className="flex-1 pb-5 mt-5">
-        <div className="flex flex-col-reverse w-full space-y-2 bg-gray-800 rounded-md text-gray-300 font-mono p-10 h-96 overflow-y-auto">
-          <div>
-            {runFinished === null && (
-              <>
-                <p className="animate-pulse mr-5">
-                  Im waiting for you to Generate a story above ...
-                </p>
-                <br />
-              </>
-            )}
 
-            <span className="mr-5">{">>"}</span>
+      {/* event log */}
+      <section className="flex-1 mt-5 pb-5">
+        <div className="overflow-y-auto h-96 p-10 bg-white rounded-md shadow-lg font-mono text-pink-500 flex flex-col-reverse space-y-2">
+          {runFinished === null && <p className="animate-pulse">Waiting…</p>}
+          <div>
+            <span className="mr-2">{">>"}</span>
             {progress}
           </div>
-          {/*Current Tool */}
           {currentTool && (
-            <div className="py-10">
-              <span className="mr-5">{"--- [current Tool] ---"}</span>
+            <div className="py-4">
+              <span>--- [Using: {currentTool}] ---</span>
             </div>
           )}
-          {/*Render Events ... */}
-          <div className="space-y-5">
-            {events.map((event, index) => (
-              <div key={index}>
-                <span className="mr-5">{">>"}</span>
-                {renderEventMessage(event)}
-              </div>
-            ))}
-          </div>
+          {events.map((evt, i) => (
+            <div key={i}>
+              <span className="mr-2">{"-->"}</span>
+              {renderEventMessage(evt)}
+            </div>
+          ))}
           {runStarted && (
             <div>
-              <span className="mr-5 animate-in">
-                {"--- [AI Storyteller Has Started] ---"}
+              <span className="animate-pulse">
+                --- [AI storyteller started] ---
               </span>
-              <br />
             </div>
           )}
         </div>
@@ -197,5 +273,3 @@ function StoryWriter() {
     </div>
   );
 }
-
-export default StoryWriter;

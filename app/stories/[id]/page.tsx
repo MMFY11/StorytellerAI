@@ -1,38 +1,25 @@
-import { getAllStories, getStory } from "@/lib/stories";
-import { notFound } from "next/navigation";
-import Story from "@/components/Story";
+// app/stories/[id]/page.tsx
+import { notFound } from 'next/navigation';
+import type { Story as StoryType } from '@/types/stories';
+import { getStoryBySlug, getAllStories } from '@/lib/stories';
+import Story from '@/components/Story';
 
-interface StoryPageProps{
-    params:{
-        id: string;
-    };
-
+interface Params {
+  id: string;
+}
+interface Props {
+  params: Params;
 }
 
-function StoryPage({params: {id}}:StoryPageProps ) {
-//Explanation: the id is URL encoded so we need to decode it before using it to get the story this fixes the issue where the story is not found when the id contains special characters such as %20 for spaces. 
-const decodedId = decodeURIComponent(id);
-
-const story = getStory(decodedId);
-
-if (!story) {
-    return notFound();
+export default async function StoryPage({ params: { id: slug } }: Props) {
+  const story: StoryType | null = await getStoryBySlug(slug);
+  if (!story) return notFound();
+  return <Story story={story} />;
 }
 
-return <Story story={story} />; 
-}
-
-export default StoryPage;
-
-export async function generateStaticParams(){
-   const stories = getAllStories();
-
-   //Explanation: we need to return an array of objects with the id property set to the story id this will generate a static page for each story
-    // Example:[{ id:"story-1" } , { id:"story-2" } , ...]
-   const paths=stories.map((story) =>({
-    id: story.story,
-   }));
-
-   return paths;
- 
+export async function generateStaticParams() {
+  const stories: StoryType[] = await getAllStories();
+  return stories.map((s: StoryType) => ({
+    id: s.slug,
+  }));
 }

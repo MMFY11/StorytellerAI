@@ -1,66 +1,86 @@
-import fs from "fs";
-import path from "path";
-import {Page, Story} from "@/types/stories";
+// lib/stories.ts
+import pool from "@/lib/db";
 import cleanTitle from "./cleanTitle";
+import type { Page, Story } from "@/types/stories";
 
-const storiesDirectory =path.join(process.cwd(), "public/stories");
+/**
+ * Fetch all stories, with pages and images, for all users
+ */
+export async function getAllStories(): Promise<Story[]> {
+  const [storyRows]: any = await pool.query(
+    `SELECT id, name
+       FROM stories
+    ORDER BY id DESC`
+  );
 
-//Access the public files and retrieve all the stories
-export function getAllStories():Story[]{
-    if(!fs.existsSync(storiesDirectory)){
-        return [];
-    }
+  const results: Story[] = [];
+  for (const { id, name } of storyRows) {
+    const [pageRows]: any = await pool.query(
+      `SELECT p.page_number, p.text, i.url
+         FROM pages p
+         LEFT JOIN images i ON i.page_id = p.id
+        WHERE p.story_id = ?
+     ORDER BY p.page_number`,
+      [id]
+    );
 
-    const storyFolders = fs.readdirSync(storiesDirectory);
-    
-    const stories: Story[]=storyFolders.map(storyFolder =>{
-        const storyPath = path.join(storiesDirectory, storyFolder);
-        const files = fs.readdirSync(storyPath);
+    const pages: Page[] = pageRows.map((r: any) => ({
+      txt: r.text,
+      png: r.url,
+    }));
 
-        const pages: Page[] = [];
-        const pageMap:{[key:string]:Partial<Page>}={};
-
-        files.forEach(file => {
-            const filePath = path.join(storyPath, file);
-            const type =path.extname(file).substring(1);
-            const pageNumber=file.match(/page(\d+)\./)?.[1];
-
-            if(pageNumber){
-                if (!pageMap[pageNumber]){
-                    pageMap[pageNumber]={};
-            }
-
-            if (type=== "txt"){
-                pageMap[pageNumber].txt = fs.readFileSync(filePath, "utf-8");
-            } else if (type=== "png"){
-                pageMap[pageNumber].png = `/stories/${storyFolder}/${file}`;
-
-             }
-            }
-        
-        });
-
-        Object.keys(pageMap).forEach((pageNumber) =>{
-            if(pageMap[pageNumber].txt && pageMap[pageNumber].png){
-                pages.push(pageMap[pageNumber] as Page);
-            }
-        });
-
-        return {
-            story: cleanTitle(storyFolder),
-            pages,
-        };
-        
+    results.push({
+      id,
+      slug: cleanTitle(name),
+      title: name,
+      pages,
     });
-    
-    const storiesWithPages = stories.filter((story) => story.pages.length > 0 );
-
-     return storiesWithPages;
-
+  }
+  return results;
 }
 
-export const getStory =(story:string): Story | undefined =>{
-    const stories = getAllStories();
-    return stories.find((s) => s.story === story);
- 
-};
+/**
+ * Fetch a single story by its slug
+ */
+export async function getStoryBySlug(slug: string): Promise<Story | null> {
+  const stories = await getAllStories();
+  return stories.find((s) => s.slug === slug) || null;
+}
+
+/**
+ * Fetch stories created by a specific user
+ */
+export async function getStoriesByUser(userId: string): Promise<Story[]> {
+  const [storyRows]: any = await pool.query(
+    `SELECT id, name
+       FROM stories
+      WHERE user_id = ?
+   ORDER BY id DESC`,
+    [userId]
+  );
+
+  const results: Story[] = [];
+  for (const { id, name } of storyRows) {
+    const [pageRows]: any = await pool.query(
+      `SELECT p.page_number, p.text, i.url
+         FROM pages p
+         LEFT JOIN images i ON i.page_id = p.id
+        WHERE p.story_id = ?
+     ORDER BY p.page_number`,
+      [id]
+    );
+
+    const pages: Page[] = pageRows.map((r: any) => ({
+      txt: r.text,
+      png: r.url,
+    }));
+
+    results.push({
+      id,
+      slug: cleanTitle(name),
+      title: name,
+      pages,
+    });
+  }
+  return results;
+}

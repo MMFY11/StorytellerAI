@@ -3,17 +3,17 @@ import { Frame } from "@gptscript-ai/gptscript";
 const renderEventMessage = (event:Frame) =>{
     switch(event.type){
         case "runStart":
-         return <div> Run Started at {event.start}</div>;
+         return <div className="text-pink-500"> Run Started at {event.start}</div>;
         case "callStart":
           return (
-            <div>
+            <div className="text-pink-500">
                 <p> Tool Starting: {event.tool?.description}</p>
             </div>
 
           );
         case "callChat":
             return (
-              <div>
+              <div className="text-pink-500">
                 Chat in progress with your input {">>"} {String(event.input)}
               </div>
             );
@@ -21,7 +21,7 @@ const renderEventMessage = (event:Frame) =>{
             return null;
         case "callFinish":
             return(
-                <div>
+                <div className="text-pink-500">
                     Call finished: {""}
                     {event.output?.map((output) =>(
                         <div key={output.content}>{output.content}</div>
