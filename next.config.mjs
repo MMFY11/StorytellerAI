@@ -1,12 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    images: {
-      domains: [
-        // add any remote domains you need for <Image> (e.g. OpenAI DALL·E)
-        'oaidalleapiprodscus.blob.core.windows.net',
-      ],
-    },
-  };
-  
-  export default nextConfig;
-  
+  images: {
+    // “domains” is deprecated; use “remotePatterns” in ESM config
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "oaidalleapiprodscus.blob.core.windows.net",
+        port: "",
+        pathname: "/**/*",
+      },
+    ],
+  },
+};
+
+export default nextConfig;

@@ -1,3 +1,4 @@
+// app/api/tts/route.ts
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
@@ -7,7 +8,6 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   const { text } = await request.json();
-
   if (!text) {
     return NextResponse.json(
       { error: "Text is required" },
@@ -16,17 +16,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Call OpenAI's TTS API
+    
     const mp3 = await openai.audio.speech.create({
-      model: "tts-1", // Use "tts-1-hd" for higher quality
-      voice: "alloy", // Options: alloy, echo, fable, onyx, nova, shimmer
+      model: "tts-1",           
+      voice: "alloy",           
       input: text,
     });
-
-    // Convert the response to a buffer
+    
     const buffer = Buffer.from(await mp3.arrayBuffer());
 
-    // Return the audio file as a response
+    
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": "audio/mpeg",

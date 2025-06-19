@@ -1,10 +1,23 @@
-// lib/stories.ts
+/**
+ * lib/stories.ts
+ * Updated to strip Markdown wrappers from image URLs returned by DALL·E
+ */
 import pool from "@/lib/db";
 import cleanTitle from "./cleanTitle";
 import type { Page, Story } from "@/types/stories";
 
 /**
- * Fetch all stories, with pages and images, for all users
+ * Extracts a bare HTTP(S) URL from Markdown link syntax:
+ *   "[alt text](https://example.com/img.png)" → "https://example.com/img.png"
+ *   otherwise returns the original string.
+ */
+function extractUrl(raw: string): string {
+  const match = raw.match(/\((https?:\/\/[^)]+)\)/);
+  return match ? match[1] : raw;
+}
+
+/**
+ * Fetch all stories, with pages and cleaned image URLs, for all users
  */
 export async function getAllStories(): Promise<Story[]> {
   const [storyRows]: any = await pool.query(
@@ -16,7 +29,7 @@ export async function getAllStories(): Promise<Story[]> {
   const results: Story[] = [];
   for (const { id, name } of storyRows) {
     const [pageRows]: any = await pool.query(
-      `SELECT p.page_number, p.text, i.url
+      `SELECT p.text, i.url
          FROM pages p
          LEFT JOIN images i ON i.page_id = p.id
         WHERE p.story_id = ?
@@ -26,7 +39,7 @@ export async function getAllStories(): Promise<Story[]> {
 
     const pages: Page[] = pageRows.map((r: any) => ({
       txt: r.text,
-      png: r.url,
+      png: extractUrl(r.url || ""),
     }));
 
     results.push({
@@ -42,7 +55,9 @@ export async function getAllStories(): Promise<Story[]> {
 /**
  * Fetch a single story by its slug
  */
-export async function getStoryBySlug(slug: string): Promise<Story | null> {
+export async function getStoryBySlug(
+  slug: string
+): Promise<Story | null> {
   const stories = await getAllStories();
   return stories.find((s) => s.slug === slug) || null;
 }
@@ -50,7 +65,9 @@ export async function getStoryBySlug(slug: string): Promise<Story | null> {
 /**
  * Fetch stories created by a specific user
  */
-export async function getStoriesByUser(userId: string): Promise<Story[]> {
+export async function getStoriesByUser(
+  userId: string
+): Promise<Story[]> {
   const [storyRows]: any = await pool.query(
     `SELECT id, name
        FROM stories
@@ -62,7 +79,7 @@ export async function getStoriesByUser(userId: string): Promise<Story[]> {
   const results: Story[] = [];
   for (const { id, name } of storyRows) {
     const [pageRows]: any = await pool.query(
-      `SELECT p.page_number, p.text, i.url
+      `SELECT p.text, i.url
          FROM pages p
          LEFT JOIN images i ON i.page_id = p.id
         WHERE p.story_id = ?
@@ -72,7 +89,7 @@ export async function getStoriesByUser(userId: string): Promise<Story[]> {
 
     const pages: Page[] = pageRows.map((r: any) => ({
       txt: r.text,
-      png: r.url,
+      png: extractUrl(r.url || ""),
     }));
 
     results.push({

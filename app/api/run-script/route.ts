@@ -1,67 +1,70 @@
-import { NextRequest, NextResponse } from "next/server";
+// app/api/run-script/route.ts
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../auth/[...nextauth]/route";
 import { GPTScript } from "@gptscript-ai/gptscript";
 import connection from "@/lib/db";
 import type { OkPacket } from "mysql2";
 
-export async function POST(request: NextRequest) {
-  try {
-    const { story, pages, userId } = await request.json();
+export async function POST(request: Request) {
+  // 1) auth check
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-    if (!story || !pages || !userId) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
+  // 2) parse + validate
+  const { prompt: story, pages, style } = await request.json();
+  if (!story || typeof pages !== "number"  || typeof style !== "string") {
+    return NextResponse.json({ error: "Missing data" }, { status: 400 });
+  }
 
-    // Build a properly quoted CLI string:
-    // Escape any internal quotes in `story`
-    const safeStory = story.replace(/"/g, '\\"');
-    const cliInput = `--story "${safeStory}" --pages ${pages}`;
+  // 3) run your .gpt template via GPTScript
+  //    we pass it exactly what you did in repo: --story and --pages
+  const safeStory = story.replace(/"/g, '\\"');
+   const cliInput =
+    `--story "${safeStory}" ` +
+    `--pages ${pages} ` +
+    `--style "${style}"`;
+  const gpt = new GPTScript({ APIKey: process.env.OPENAI_API_KEY! });
+  const run = await gpt.run(
+    "app/api/run-script/story-book.gpt",
+    { disableCache: true, input: cliInput }
+  );
+  const raw = await run.text();
+  const output = JSON.parse(raw) as {
+    title: string;
+    pages: { text: string; imageUrl: string }[];
+  };
 
-    const gpt = new GPTScript({ APIKey: process.env.OPENAI_API_KEY! });
-    const run = await gpt.run(
-      "app/api/run-script/story-book.gpt",
-      { disableCache: true, input: cliInput }
+  // 4) insert into `stories`
+  const [storyResult] = await connection.query<OkPacket>(
+    `INSERT INTO stories (topic, name, number_of_pages, date, user_id)
+     VALUES (?, ?, ?, NOW(), ?)`,
+    [story, output.title, pages, session.user.id]
+  );
+  const storyId = (storyResult as any).insertId as number;
+
+  // 5) insert each page + its image
+  for (let i = 0; i < output.pages.length; i++) {
+    const pg = output.pages[i];
+
+    // insert page text
+    const [pageResult] = await connection.query<OkPacket>(
+      `INSERT INTO pages (story_id, page_number, text)
+       VALUES (?, ?, ?)`,
+      [storyId, i + 1, pg.text]
     );
+    const pageId = (pageResult as any).insertId as number;
 
-    // Read the JSON back from the tool
-    const raw = await run.text();
-    const output = JSON.parse(raw) as {
-      title: string;
-      pages: { text: string; imageUrl: string }[];
-    };
-
-    // 1) Insert the story record
-    const [storyResult] = await connection.query<OkPacket>(
-      `INSERT INTO stories (topic, name, number_of_pages, date, user_id)
-       VALUES (?, ?, ?, ?, ?)`,
-      [story, output.title, pages, new Date(), userId]
-    );
-    const storyId = storyResult.insertId;
-
-    // 2) Insert each page & its image URL
-    for (let i = 0; i < output.pages.length; i++) {
-      const pg = output.pages[i];
-      const [pageResult] = await connection.query<OkPacket>(
-        `INSERT INTO pages (story_id, page_number, text)
-         VALUES (?, ?, ?)`,
-        [storyId, i + 1, pg.text]
-      );
-      const pageId = pageResult.insertId;
-
-      await connection.query<OkPacket>(
-        `INSERT INTO images (page_id, url) VALUES (?, ?)`,
-        [pageId, pg.imageUrl]
-      );
-    }
-
-    return NextResponse.json({ success: true, storyId });
-  } catch (err) {
-    console.error("Error in run-script route:", err);
-    return NextResponse.json(
-      { error: "Failed to generate story" },
-      { status: 500 }
+    // insert image URL
+    await connection.query<OkPacket>(
+      `INSERT INTO images (page_id, url)
+       VALUES (?, ?)`,
+      [pageId, pg.imageUrl]
     );
   }
+
+  // 6) return only once everything is done
+  return NextResponse.json({ success: true, storyId });
 }

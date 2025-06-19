@@ -13,10 +13,16 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
     if (password !== confirm) {
       setError("Passwords do not match");
       return;
     }
+
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -35,33 +41,47 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit} className="bg-white p-8 rounded shadow-md w-full max-w-sm">
         <h1 className="text-xl font-semibold mb-4">Create an Account</h1>
         {error && <p className="text-red-500 mb-2">{error}</p>}
+
         <label className="block mb-2">Name</label>
         <input
           className="w-full p-2 border rounded mb-4"
-          value={name} onChange={e => setName(e.target.value)}
+          value={name}
+          onChange={e => setName(e.target.value)}
           required
         />
+
         <label className="block mb-2">Email</label>
         <input
           type="email"
-          className="w-full p-2 border rounded mb-4"
-          value={email} onChange={e => setEmail(e.target.value)}
           required
+          pattern="^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$"
+          title="Please enter a valid email (e.g. you@example.com or you@example.co)"
+          className="w-full p-2 border rounded mb-4"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
         />
+
+
         <label className="block mb-2">Password</label>
         <input
           type="password"
+          minLength={6}
           className="w-full p-2 border rounded mb-4"
-          value={password} onChange={e => setPassword(e.target.value)}
+          value={password}
+          onChange={e => setPassword(e.target.value)}
           required
         />
+
         <label className="block mb-2">Confirm Password</label>
         <input
           type="password"
+          minLength={6}
           className="w-full p-2 border rounded mb-4"
-          value={confirm} onChange={e => setConfirm(e.target.value)}
+          value={confirm}
+          onChange={e => setConfirm(e.target.value)}
           required
         />
+
         <label className="block mb-2">I am a…</label>
         <select
           className="w-full p-2 border rounded mb-6"
@@ -71,6 +91,7 @@ export default function RegisterPage() {
           <option value="reader">Reader</option>
           <option value="creator">Creator</option>
         </select>
+
         <button
           type="submit"
           className="w-full bg-blue-600 text-white p-2 rounded"

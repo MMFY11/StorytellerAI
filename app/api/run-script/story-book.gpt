@@ -4,39 +4,52 @@ description: Writes a children's book and generates illustrations for it, return
 
 args: story: The story to write and illustrate. Can be a prompt or a complete story.
 args: pages: The number of pages to generate
+style: The illustration style to use (must be one of the seven user‑chosen options).
 
 # Steps
 
-1. If the ${story} is inappropriate for children, abort the process and cite the reason why.
+1. If the \${story} is inappropriate for children, abort the process and cite the reason why.
+   Only abort if you detect:
 
-2. Call story-writer with:
-    - prompt: ${story}
-    - pages: ${pages}
-   => Save as: writtenStory, characters, settings, style
+   * **Explicit sexual content** (e.g.  nudity for adult context)
+   * **Graphic violence or gore** (e.g. “blood spurted”, “brains exposed”)
+   * **Hate speech or slurs** (e.g. racial slurs, calls for violence against protected groups)
+     Otherwise, always continue.
+
+js
+if (/(sexualgore|kill death|slur1|slur2)/i.test(story)) {
+sys.abort("ABORT: The story is inappropriate for children.");
+}
+2\. Call story-writer with:
+\- prompt: \${story}
+\- pages: \${pages}
+\=> Save as: writtenStory, characters, settings
 
 3. If the writtenStory is inappropriate for children, abort the process and cite the reason why.
 
-4. Initialize pages = []
+4. Initialize pages = \[]
 
 5. For each page in writtenStory.pages:
-    - Call story-illustrator with:
-        - text: page
-        - characters: ${characters}
-        - settings: ${settings}
-        - style: ${style}
-      => Save result as imageUrl
 
-    - Append to pages array:
-      {
-        "text": page,
-        "imageUrl": imageUrl
-      }
+   * Call story-illustrator with:
+
+     * text: page
+     * characters: \${characters}
+     * settings: \${settings}
+     * style: \${style}
+       \=> Save result as imageUrl
+
+   * Append to pages array:
+     {
+     "text": page,
+     "imageUrl": imageUrl
+     }
 
 6. Return exactly:
-{
-  "title": writtenStory.title,
-  "pages": pages
-}
+   {
+   "title": writtenStory.title,
+   "pages": pages
+   }
 
 ---
 
@@ -47,22 +60,23 @@ description: Writes a story for children. Returns a story, illustration style, l
 args: prompt: The prompt to use for the story
 args: pages: The number of pages that the story should have.
 
-temperature: 1
+temperature: 0.7
 
-You are an accomplished children's story writer. Write a story based on ${prompt} that has ${pages} pages. Along with the story, return:
-- A title
-- An array of page texts
-- A short illustration style (5 words max)
-- Character descriptions
-- Setting descriptions
+You are an accomplished children's story writer. Write a story based on \${prompt} that has \${pages} pages. Along with the story, return:
+
+* A title
+* An array of page texts
+* A short illustration style (5 words max)
+* Character descriptions
+* Setting descriptions
 
 Return everything as:
 {
-  "title": "Your Story Title",
-  "pages": ["Page 1 text", "Page 2 text", ...],
-  "characters": "Full character descriptions",
-  "settings": "Full setting descriptions",
-  "style": "Simple cartoon"
+"title": "Your Story Title",
+"pages": \["Page 1 text", "Page 2 text", ...],
+"characters": "Full character descriptions",
+"settings": "Full setting descriptions",
+
 }
 
 ---
@@ -80,6 +94,6 @@ args: characters: The characters of the story and their physical appearance
 args: settings: The settings of the story and their physical appearance
 args: style: The illustration style
 
-Generate a DALL·E-style prompt based on ${text}, ${characters}, and ${settings}. Make sure the prompt is child-safe.
-Append: ". In an ${style} children's book style. DO NOT INCLUDE TEXT EVER."
+Generate a DALL·E-style prompt based on \${text}, \${characters}, and \${settings}. Make sure the prompt is child-safe.
+Append: ". In an \${style} style. DO NOT INCLUDE TEXT EVER."
 Return only the image URL.
