@@ -1,5 +1,47 @@
 This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+Kidotopia – AI-Powered Storytelling Platform
 
+About the Project
+
+Kidotopia is an AI-powered storytelling platform designed to inspire children's creativity through personalized story generation. It allows creators to generate illustrated storybooks from short text prompts using OpenAI technologies. The platform also provides an interactive library where readers can explore stories, listen to voice narrations, translate content into different languages, rate stories, and leave comments.
+
+Project Objective
+
+The main objective of Kidotopia is to make storytelling accessible, creative, and engaging for children. It aims to simplify the story creation process through AI while providing readers with an interactive and enjoyable reading experience.
+
+Key Features
+
+Personalized AI story generation.
+
+AI-generated story illustrations.
+
+Speech-to-text input.
+
+AI-assisted story editing through a chatbot.
+
+Customizable story layouts and visuals.
+
+Multilingual story translation.
+
+Text-to-speech voice narration.
+
+Interactive story library.
+
+Story ratings and comments.
+
+Separate Creator and Reader roles.
+
+Technologies Used
+
+Frontend: React, Next.js, Tailwind CSS
+
+Backend: Node.js
+
+Database: MySQL
+
+AI Technologies: OpenAI GPT-4, DALL·E 3, Whisper, GPT-3.5-Turbo, TTS-1
+
+Workflow Automation: GPTScript
 ## Getting Started
 
 First, run the development server:
